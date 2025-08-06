@@ -1,0 +1,30 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.38.1.
+--
+-- see: https://github.com/sol/hpack
+
+name:           counterpoint
+version:        0.0.0
+description:    enumerate species counterpoint with sbv
+build-type:     Simple
+
+library
+  exposed-modules:
+      Fux1
+  other-modules:
+      Paths_counterpoint
+  hs-source-dirs:
+      lib
+  build-depends:
+      base
+    , containers
+    , hmm >=0.3
+    , huffman
+    , lens
+    , lens-action
+    , sbv
+    , split
+    , tidal
+    , tidal-core
+  default-language: Haskell2010

@@ -1,0 +1,17 @@
+description: enumerate species counterpoint with sbv
+
+dependencies:
+  - base
+  - sbv
+  - lens
+  - lens-action
+  - tidal
+  - containers
+  - tidal-core
+  - hmm >= 0.3
+  - huffman # needs to hide Data.Sequence.Empty
+  - split
+
+library:
+  source-dirs:
+    - lib

@@ -1,0 +1,6 @@
+packages: .
+
+source-repository-package
+  type: git
+  location: https://github.com/aavogt/hmm.git
+  tag: 68876c621c2ab297f8687848627829358058fb84

@@ -12,24 +12,23 @@ cabal install --lib
 ## example
 
 ```haskell
+-- juno-example.mp3
 import Fux1
-
-let nI xs = n (cat (map (pure . fromIntegral . subtract 60) xs))
-
 do
-    let asInt str = case parseTPat str of Right (TPat_Seq s) -> map (\(TPat_Atom _ a) -> 60 + a) s
+    setcps 0.5
+    let inst = mconcat [sound "juno" # djf (range 0.2 0.8 (slow 2 perlin)) # lpq (range 0.4 0.5 perlin),
+            off 0.125 (|+ slow 2 (choose [2,7])) "arpy"]
+    let doh = 60
+    let nI xs = n $ cat $ pure . fromIntegral . subtract doh <$> xs
+    let asInt str = case parseTPat str of Right (TPat_Seq s) -> map (\(TPat_Atom _ a) -> doh + a) s
     let gs = asInt "c d e g e e a4 c"
     xs <- cache (fux1 defaultFux1) gs
-    d1 $ nI gs # sound "supermandolin" # legato (range 0.5 4 (slow 8 perlin))
-    d2 $ randcat [ nI x # sound "supermandolin" | x <- xs ] # legato 0.8 # gain 0.9
-    d3 $ sometimes (fast 2) $ "808bd <808hc 808ht>" # gain 1.1
-    let p = 6
-    let q = 8
-    let b q = concatMap ((True:) . flip replicate False . (`mod` p)) $ zipWith subtract gs (xs !! q)
-    let c q = map (`div` p) $ zipWith subtract gs (xs !! q)
-    d4 $ do
-      -- it would be nice to vary p or q slowly.
-      -- This way doesn't play arpy, but other join-like functions might work
-      -- q <- slow 8 $ _irand (length cps - 1)
-      fast 8 $ n (fromList (map fromIntegral (c q))) # struct (fromList (b q)) "arpy" # gain 0.7
+    let f q p = mconcat [fast 8 $ n c # struct b inst # gain 0.9,
+              nI (xs !! q) # inst]
+            where
+            b = fromList $ concatMap ((True:) . flip replicate False . (`mod` p)) $ map (subtract (head gs)) (xs !! q)
+            c = fromList $ map fromIntegral $ map (`div` p) $ zipWith subtract gs (xs !! q)
+    let mq = slow 4 (_irand (length xs - 1))
+    let mp = slow 4 (1 |+ _irand 3)
+    d1 $ mconcat [nI gs # inst, innerJoin $ f <$> mq <*> mp, "{bd*4, hc ~ }" # gain 0.8 ]
 ```

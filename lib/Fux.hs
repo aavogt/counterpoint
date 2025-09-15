@@ -1,26 +1,38 @@
+{-# LANGUAGE FlexibleInstances #-}
+
 module Fux (module Fux, module Data.Default) where
 
 import Control.Lens hiding ((.>))
 import Control.Lens.Action
 import Control.Monad
 import Data.Default
+import Data.Dynamic
+import Data.Either
 import Data.IORef
 import Data.List
 import qualified Data.Map as M
 import Data.SBV
 import Data.SBV.Dynamic hiding (allSatWith)
 import Data.SBV.Internals
+import Data.String
 import Debug.Trace
-import Sound.Tidal.Boot (cat, n)
+import Sound.Tidal.Boot (cat, n, _irand)
 import Sound.Tidal.ParseBP
 import Sound.Tidal.Pattern
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Read
 
+newtype AlwaysEq a = AlwaysEq a
+
+instance Eq (AlwaysEq a) where (==) _ _ = True
+
 -- | Configuration for first species counterpoint
 -- but perhaps a better way to organize this is as separate functions that just add the constraints?
 data Fux1 = Fux1
-  { cadenceType :: CadenceType,
+  { doh :: Int,
+    -- | `AlwaysEq cachef` or `AlwaysEq id`, though if you want multiple caches another function is needed
+    cache :: AlwaysEq ((Fux1 -> [Int] -> IO [[Int]]) -> (Fux1 -> [Int] -> IO [[Int]])),
+    cadenceType :: CadenceType,
     voicePosition :: VoicePosition, -- counterpoint above or below cantus firmus
     allowCrossing :: Bool, -- allow voices to cross
     allowedRange :: (Int, Int), -- MIDI range for counterpoint voice
@@ -29,15 +41,70 @@ data Fux1 = Fux1
     retriggers :: Int,
     nsol :: Int
   }
-  deriving (Show, Eq)
+  deriving (Eq)
 
 data CadenceType = Authentic | Plagal | Half deriving (Show, Eq)
 
 data VoicePosition = Above | Below deriving (Show, Eq)
 
+-- | counterpoint result
+-- TODO duplication between fux1 and fux2... and future fux3
+data XS c = XS
+  { -- | generated counterpoints integer representation
+    xssI :: [[Int]],
+    -- | given melody integer representation
+    gsI :: [Int],
+    gs :: ControlPattern,
+    -- | `length xssI`
+    nmax :: Int,
+    -- | `xs_ (_irand nmax)`
+    xs :: ControlPattern,
+    -- | pick the counterpoint
+    xs_ :: Pattern Int -> ControlPattern,
+    xss :: [ControlPattern],
+    config :: c
+  }
+
+instance IsString (TPat Int) where
+  fromString s = fromRight (error ("cannot parse as TPat Int: " ++ s)) $ parseTPat s
+
+fux1 :: Fux1 -> TPat Int -> IO (XS Fux1)
+fux1 config@Fux1 {doh, cache = AlwaysEq cache} gs = do
+  let nI xs = n $ cat $ pure . fromIntegral . subtract doh <$> xs
+      asInt str = case str of TPat_Seq s -> map (\(TPat_Atom _ a) -> doh + a) s
+  let gsI = asInt gs
+  xssI <- cache fux1Int config gsI
+  let nmax = length xssI
+  let xss = map nI xssI
+  let xs_ n = innerJoin $ (xss !!) . (`mod` nmax) <$> n
+  let xs = xs_ (_irand nmax)
+  let gs = nI gsI
+  return XS {..}
+
+fux2 :: Fux2 -> TPat Int -> TPat Int -> IO (XS Fux2)
+fux2 config@Fux2 {doh, cache = AlwaysEq cache} gs rs = do
+  let nI xs = n $ cat $ pure . fromIntegral . subtract doh <$> xs
+      asInt str = case str of TPat_Seq s -> map (\(TPat_Atom _ a) -> doh + a) s
+  let gsI = asInt gs
+  let rsI = (/= 0) <$> asInt rs
+  xssI <- cache fux2Int config (gsI `zip` rsI)
+  let nmax = length xssI
+  let xss = map nI xssI
+  let xs_ n = innerJoin $ (xss !!) . (`mod` nmax) <$> n
+  let xs = xs_ (_irand nmax)
+  let gs = nI gsI
+  return XS {..}
+
+-- -- | generate all 2nd species counterpoints with the given rhythm
+-- fux2Int ::
+--   Fux2 ->
+--   -- | `[(cantusNote, twoCounterpointNotes?)]`
+--   [(Int, Bool)] ->
+--   IO [[Int]]
+
 -- | generate all valid 1st species counterpoints
-fux1 :: Fux1 -> [Int] -> IO [[Int]]
-fux1 config@Fux1 {..} cantus = do
+fux1Int :: Fux1 -> [Int] -> IO [[Int]]
+fux1Int config@Fux1 {..} cantus = do
   if null (drop 2 cantus)
     then return []
     else do
@@ -105,7 +172,9 @@ applyFuxConstraints config@Fux1 {..} (map fromIntegral -> gs) xs = do
     _ -> return ()
 
 data Fux2 = Fux2
-  { cadenceType :: CadenceType,
+  { doh :: Int,
+    cache :: AlwaysEq ((Fux2 -> [(Int, Bool)] -> IO [[Int]]) -> (Fux2 -> [(Int, Bool)] -> IO [[Int]])),
+    cadenceType :: CadenceType,
     voicePosition :: VoicePosition, -- counterpoint above or below cantus firmus
     allowCrossing :: Bool, -- allow voices to cross
     allowedRange :: (Int, Int), -- MIDI range for counterpoint voice
@@ -114,14 +183,15 @@ data Fux2 = Fux2
     retriggers :: Int,
     nsol :: Int
   }
+  deriving (Eq)
 
 -- | generate all 2nd species counterpoints with the given rhythm
-fux2 ::
+fux2Int ::
   Fux2 ->
   -- | `[(cantusNote, twoCounterpointNotes?)]`
   [(Int, Bool)] ->
   IO [[Int]]
-fux2 config@Fux2 {..} (unzip -> (cantus, duple)) = do
+fux2Int config@Fux2 {..} (unzip -> (cantus, duple)) = do
   -- expand cantus to match counterpoint positions (1 or 2 notes per cantus)
   let gs = concat [replicate (if d then 2 else 1) g | (g, d) <- zip cantus duple]
   if length cantus < 3
@@ -235,7 +305,9 @@ extractSolutions (AllSatResult _ _ _ solutions) =
 instance Default Fux1 where
   def =
     Fux1
-      { cadenceType = Plagal,
+      { doh = 60,
+        cache = AlwaysEq cachef,
+        cadenceType = Plagal,
         voicePosition = Above,
         allowCrossing = False,
         retriggers = 2,
@@ -248,6 +320,8 @@ instance Default Fux2 where
     Fux2
       { cadenceType = Plagal,
         voicePosition = Above,
+        doh = 60,
+        cache = AlwaysEq cachef,
         allowCrossing = False,
         retriggers = 2,
         allowedRange = (60, 72), -- Middle C to C5
@@ -265,7 +339,7 @@ ngram n = takeWhile ((== n) . length) . map (take n) . tails
 runExample :: IO ()
 runExample = do
   putStrLn "Generating counterpoints for cantus firmus: C-D-E-D-C"
-  solutions <- fux2 def (exampleCantus `zip` exampleRhythm)
+  solutions <- fux2Int def (exampleCantus `zip` exampleRhythm)
 
   mapM_ print $ sortOn snd $ M.toList $ M.fromListWith (+) $ concat [map (,1) $ map relativize $ ngram 4 s | s <- solutions]
   putStrLn $ "Found " ++ show (length solutions) ++ " valid counterpoints:"
@@ -282,26 +356,18 @@ saveCounterpointsToCSV filePath counterpoints = do
 -- * utilities for tidal
 
 {-# NOINLINE gRef #-}
-gRef = unsafePerformIO $ newIORef ([] :: [Int])
+gRef = unsafePerformIO $ newIORef (toDyn (), [] :: [Dynamic])
 
 {-# NOINLINE xRef #-}
 xRef = unsafePerformIO $ newIORef ([[]] :: [[Int]])
 
--- | `xs <- cache (fux1 def) cantus`
-cache f g = do
-  gp <- readIORef gRef
-  if g == gp
+-- | applied by fux1
+cachef f config g = do
+  (oldConfig, gOld) <- readIORef gRef
+  if Just config == fromDynamic oldConfig && map Just g == map fromDynamic gOld
     then readIORef xRef
     else do
-      xn <- f g
+      xn <- f config g
       writeIORef xRef xn
-      writeIORef gRef g
+      writeIORef gRef (toDyn config, map toDyn g)
       return xn
-
--- | return type for `transposer`
-data TP = TP {doh :: Int, nI :: [Int] -> ControlPattern, asInt :: String -> [Int]}
-
-transposer doh =
-  let nI xs = n $ cat $ pure . fromIntegral . subtract doh <$> xs
-      asInt str = case parseTPat str of Right (TPat_Seq s) -> map (\(TPat_Atom _ a) -> doh + a) s
-   in TP {..}

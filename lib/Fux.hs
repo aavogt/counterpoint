@@ -1,8 +1,9 @@
-module Fux where
+module Fux (module Fux, module Data.Default) where
 
 import Control.Lens hiding ((.>))
 import Control.Lens.Action
 import Control.Monad
+import Data.Default
 import Data.IORef
 import Data.List
 import qualified Data.Map as M
@@ -226,28 +227,27 @@ extractSolutions (AllSatResult _ _ _ solutions) =
        in map (fromInteger . snd) $ Data.List.sortBy (\(a, _) (b, _) -> compare a b) sorted
     extractModel _ = []
 
--- Helper function to create common configurations
-defaultFux1 :: Fux1
-defaultFux1 =
-  Fux1
-    { cadenceType = Plagal,
-      voicePosition = Above,
-      allowCrossing = False,
-      retriggers = 2,
-      allowedRange = (60, 72), -- Middle C to C5
-      nsol = 5000
-    }
+instance Default Fux1 where
+  def =
+    Fux1
+      { cadenceType = Plagal,
+        voicePosition = Above,
+        allowCrossing = False,
+        retriggers = 2,
+        allowedRange = (60, 72), -- Middle C to C5
+        nsol = 5000
+      }
 
-defaultFux2 :: Fux2
-defaultFux2 =
-  Fux2
-    { cadenceType = Plagal,
-      voicePosition = Above,
-      allowCrossing = False,
-      retriggers = 2,
-      allowedRange = (60, 72), -- Middle C to C5
-      nsol = 5000
-    }
+instance Default Fux2 where
+  def =
+    Fux2
+      { cadenceType = Plagal,
+        voicePosition = Above,
+        allowCrossing = False,
+        retriggers = 2,
+        allowedRange = (60, 72), -- Middle C to C5
+        nsol = 5000
+      }
 
 -- Example usage
 exampleCantus :: [Int]
@@ -265,7 +265,7 @@ ngram n = takeWhile ((== n) . length) . map (take n) . tails
 runExample :: IO ()
 runExample = do
   putStrLn "Generating counterpoints for cantus firmus: C-D-E-D-C"
-  solutions <- fux2 defaultFux2 (exampleCantus `zip` exampleRhythm)
+  solutions <- fux2 def (exampleCantus `zip` exampleRhythm)
 
   mapM_ print $ sortOn snd $ M.toList $ M.fromListWith (+) $ concat [map (,1) $ map relativize $ ngram 4 s | s <- solutions]
   putStrLn $ "Found " ++ show (length solutions) ++ " valid counterpoints:"
@@ -287,7 +287,7 @@ gRef = unsafePerformIO $ newIORef ([] :: [Int])
 {-# NOINLINE xRef #-}
 xRef = unsafePerformIO $ newIORef ([[]] :: [[Int]])
 
--- | `xs <- cache (fux1 defaultFux1) cantus`
+-- | `xs <- cache (fux1 def) cantus`
 cache f g = do
   gp <- readIORef gRef
   if g == gp

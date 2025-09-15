@@ -9,6 +9,7 @@ dependencies:
   - containers
   - tidal-core
   - split
+  - data-default
 
 library:
   source-dirs:

@@ -22,7 +22,7 @@ do
             off 0.125 (|+ slow 2 (choose [2,7])) "arpy"]
     let TP { doh, nI, asInt } = transposer 60
     let gs = asInt "c d e g e e a4 c"
-    xs <- cache (fux1 defaultFux1) gs
+    xs <- cache (fux1 def) gs
     let f q p = mconcat [fast 8 $ n c # struct b inst # gain 0.9,
               nI (xs !! q) # inst]
             where

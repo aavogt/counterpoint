@@ -28,6 +28,7 @@ library
   build-depends:
       base
     , containers
+    , data-default
     , lens
     , lens-action
     , sbv

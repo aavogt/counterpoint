@@ -8,10 +8,17 @@ dependencies:
   - tidal
   - containers
   - tidal-core
-  - hmm >= 0.3
-  - huffman # needs to hide Data.Sequence.Empty
   - split
 
 library:
   source-dirs:
     - lib
+  default-extensions:
+    - BlockArguments
+    - DisambiguateRecordFields
+    - DuplicateRecordFields
+    - NamedFieldPuns
+    - RecordWildCards
+    - TupleSections
+    - TypeApplications
+    - ViewPatterns

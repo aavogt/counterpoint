@@ -11,16 +11,23 @@ build-type:     Simple
 
 library
   exposed-modules:
-      Fux1
+      Fux
   other-modules:
       Paths_counterpoint
   hs-source-dirs:
       lib
+  default-extensions:
+      BlockArguments
+      DisambiguateRecordFields
+      DuplicateRecordFields
+      NamedFieldPuns
+      RecordWildCards
+      TupleSections
+      TypeApplications
+      ViewPatterns
   build-depends:
       base
     , containers
-    , hmm >=0.3
-    , huffman
     , lens
     , lens-action
     , sbv

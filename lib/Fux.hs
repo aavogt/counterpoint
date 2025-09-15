@@ -17,7 +17,7 @@ import Sound.Tidal.Pattern
 import System.IO.Unsafe (unsafePerformIO)
 import Text.Read
 
--- Configuration for first species counterpoint
+-- | Configuration for first species counterpoint
 -- but perhaps a better way to organize this is as separate functions that just add the constraints?
 data Fux1 = Fux1
   { cadenceType :: CadenceType,
@@ -35,7 +35,7 @@ data CadenceType = Authentic | Plagal | Half deriving (Show, Eq)
 
 data VoicePosition = Above | Below deriving (Show, Eq)
 
--- Main function: generate all valid counterpoints
+-- | generate all valid 1st species counterpoints
 fux1 :: Fux1 -> [Int] -> IO [[Int]]
 fux1 config@Fux1 {..} cantus = do
   if null (drop 2 cantus)
@@ -115,7 +115,12 @@ data Fux2 = Fux2
     nsol :: Int
   }
 
-fux2 :: Fux2 -> [(Int, Bool)] -> IO [[Int]]
+-- | generate all 2nd species counterpoints with the given rhythm
+fux2 ::
+  Fux2 ->
+  -- | `[(cantusNote, twoCounterpointNotes?)]`
+  [(Int, Bool)] ->
+  IO [[Int]]
 fux2 config@Fux2 {..} (unzip -> (cantus, duple)) = do
   -- expand cantus to match counterpoint positions (1 or 2 notes per cantus)
   let gs = concat [replicate (if d then 2 else 1) g | (g, d) <- zip cantus duple]
@@ -254,11 +259,6 @@ exampleCantus :: [Int]
 exampleCantus = [60, 62, 64, 62, 57, 60] -- C-D-E-D-A-C
 
 exampleRhythm = cycle [False, True, False]
-
--- has for 4608 valid counterpoints
--- huffman
--- huffman :: (Ord w, Num w) => [(a, w)] -> HuffmanTree a
--- `a` should be an n-gram
 
 ngram n = takeWhile ((== n) . length) . map (take n) . tails
 

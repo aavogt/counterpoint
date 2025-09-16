@@ -56,7 +56,8 @@ data XS c = XS
     -- | `length xssI`
     nmax :: Int,
     -- | `length gsI`
-    nbeat :: Int,
+    nbeat_ :: Int,
+    nbeat :: Pattern Time,
     -- | `xs_ (_irand nmax)`
     xs :: ControlPattern,
     -- | pick the counterpoint
@@ -84,8 +85,9 @@ mkXS XS0 {..} =
       nI = fromMaybe nI0 nIM
       xss = map nI xssI
       xs_ n = innerJoin $ (xss !!) . (`mod` nmax) <$> n
-      nbeat = length gsI
-      xs = xs_ (slow (pure (fromIntegral nbeat)) (_irand nmax))
+      nbeat_ = length gsI
+      nbeat = pure (fromIntegral nbeat_)
+      xs = xs_ (slow nbeat (_irand nmax))
       gs = nI gsI
    in XS {..}
 

@@ -20,7 +20,9 @@ library
       BlockArguments
       DisambiguateRecordFields
       DuplicateRecordFields
+      FlexibleInstances
       NamedFieldPuns
+      OverloadedStrings
       RecordWildCards
       TupleSections
       TypeApplications

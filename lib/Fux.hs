@@ -1,5 +1,3 @@
-{-# LANGUAGE FlexibleInstances #-}
-
 module Fux (module Fux, module Data.Default) where
 
 import Control.Lens hiding ((.>))
@@ -11,12 +9,13 @@ import Data.Either
 import Data.IORef
 import Data.List
 import qualified Data.Map as M
+import Data.Maybe
 import Data.SBV
 import Data.SBV.Dynamic hiding (allSatWith)
 import Data.SBV.Internals
 import Data.String
 import Debug.Trace
-import Sound.Tidal.Boot (cat, n, _irand)
+import Sound.Tidal.Boot (cat, fastcat, n, _irand)
 import Sound.Tidal.ParseBP
 import Sound.Tidal.Pattern
 import System.IO.Unsafe (unsafePerformIO)
@@ -48,7 +47,6 @@ data CadenceType = Authentic | Plagal | Half deriving (Show, Eq)
 data VoicePosition = Above | Below deriving (Show, Eq)
 
 -- | counterpoint result
--- TODO duplication between fux1 and fux2... and future fux3
 data XS c = XS
   { -- | generated counterpoints integer representation
     xssI :: [[Int]],
@@ -57,6 +55,8 @@ data XS c = XS
     gs :: ControlPattern,
     -- | `length xssI`
     nmax :: Int,
+    -- | `length gsI`
+    nbeat :: Int,
     -- | `xs_ (_irand nmax)`
     xs :: ControlPattern,
     -- | pick the counterpoint
@@ -65,39 +65,54 @@ data XS c = XS
     config :: c
   }
 
+-- | essence of XS
+data XS0 c = XS0
+  { config :: c,
+    doh :: Int,
+    gs0 :: TPat Int,
+    gsI :: [Int],
+    xssI :: [[Int]],
+    -- | override nI
+    nIM :: Maybe ([Int] -> ControlPattern)
+  }
+
+-- | helper to build XS from shared pieces
+mkXS :: XS0 c -> XS c
+mkXS XS0 {..} =
+  let nmax = length xssI
+      nI0 xs = n $ cat $ pure . fromIntegral . subtract doh <$> xs
+      nI = fromMaybe nI0 nIM
+      xss = map nI xssI
+      xs_ n = innerJoin $ (xss !!) . (`mod` nmax) <$> n
+      nbeat = length gsI
+      xs = xs_ (slow (pure (fromIntegral nbeat)) (_irand nmax))
+      gs = nI gsI
+   in XS {..}
+
 instance IsString (TPat Int) where
   fromString s = fromRight (error ("cannot parse as TPat Int: " ++ s)) $ parseTPat s
 
 fux1 :: Fux1 -> TPat Int -> IO (XS Fux1)
-fux1 config@Fux1 {doh, cache = AlwaysEq cache} gs = do
-  let nI xs = n $ cat $ pure . fromIntegral . subtract doh <$> xs
-      asInt str = case str of TPat_Seq s -> map (\(TPat_Atom _ a) -> doh + a) s
-  let gsI = asInt gs
+fux1 config@Fux1 {doh, cache = AlwaysEq cache} gs0 = do
+  let gsI = tpatIntList doh gs0
+      nIM = Nothing
   xssI <- cache fux1Int config gsI
-  let nmax = length xssI
-  let xss = map nI xssI
-  let xs_ n = innerJoin $ (xss !!) . (`mod` nmax) <$> n
-  let xs = xs_ (_irand nmax)
-  let gs = nI gsI
-  return XS {..}
+  return $ mkXS XS0 {..}
 
 -- | `XS { .. } <- fux2 def "d e g a c d" "0 1"`
---
--- TODO: the output xs, xs_ xxs ControlPatterns are wrong, in that they do not
--- respect the rhythm, which for the above would be a repeating pattern of whole note, half note, half note
 fux2 :: Fux2 -> TPat Int -> TPat Int -> IO (XS Fux2)
-fux2 config@Fux2 {doh, cache = AlwaysEq cache} gs rs = do
-  let nI xs = n $ cat $ pure . fromIntegral . subtract doh <$> xs
-      asInt str = case str of TPat_Seq s -> map (\(TPat_Atom _ a) -> doh + a) s
-  let gsI = asInt gs
-  let rsI = (/= 0) <$> asInt rs
-  xssI <- cache fux2Int config (gsI `zip` rsI)
-  let nmax = length xssI
-  let xss = map nI xssI
-  let xs_ n = innerJoin $ (xss !!) . (`mod` nmax) <$> n
-  let xs = xs_ (_irand nmax)
-  let gs = nI gsI
-  return XS {..}
+fux2 config@Fux2 {doh, cache = AlwaysEq cache} gs0 ds = do
+  let gsI = tpatIntList doh gs0
+  let dsB = (/= 0) <$> tpatIntList doh ds
+  let nIM = Just \xs ->
+        fastcat
+          [ cat (note : hold)
+            | (x, r) <- xs `zip` cycle dsB,
+              let note = n $ pure $ fromIntegral $ x - doh,
+              let hold = ["_" | not r]
+          ]
+  xssI <- cache fux2Int config (gsI `zip` dsB)
+  return $ mkXS XS0 {..}
 
 -- | generate all valid 1st species counterpoints
 fux1Int :: Fux1 -> [Int] -> IO [[Int]]
@@ -365,3 +380,7 @@ cachef f config g = do
       writeIORef xRef xn
       writeIORef gRef (toDyn config, map toDyn g)
       return xn
+
+-- | `tpatIntList 60 "c d e"  = [60, 62, 64, 65]`
+tpatIntList :: Int -> TPat Int -> [Int]
+tpatIntList doh str = case str of TPat_Seq s -> map (\(TPat_Atom _ a) -> doh + a) s

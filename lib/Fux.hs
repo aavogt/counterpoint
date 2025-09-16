@@ -81,6 +81,10 @@ fux1 config@Fux1 {doh, cache = AlwaysEq cache} gs = do
   let gs = nI gsI
   return XS {..}
 
+-- | `XS { .. } <- fux2 def "d e g a c d" "0 1"`
+--
+-- TODO: the output xs, xs_ xxs ControlPatterns are wrong, in that they do not
+-- respect the rhythm, which for the above would be a repeating pattern of whole note, half note, half note
 fux2 :: Fux2 -> TPat Int -> TPat Int -> IO (XS Fux2)
 fux2 config@Fux2 {doh, cache = AlwaysEq cache} gs rs = do
   let nI xs = n $ cat $ pure . fromIntegral . subtract doh <$> xs
@@ -94,13 +98,6 @@ fux2 config@Fux2 {doh, cache = AlwaysEq cache} gs rs = do
   let xs = xs_ (_irand nmax)
   let gs = nI gsI
   return XS {..}
-
--- -- | generate all 2nd species counterpoints with the given rhythm
--- fux2Int ::
---   Fux2 ->
---   -- | `[(cantusNote, twoCounterpointNotes?)]`
---   [(Int, Bool)] ->
---   IO [[Int]]
 
 -- | generate all valid 1st species counterpoints
 fux1Int :: Fux1 -> [Int] -> IO [[Int]]
@@ -353,15 +350,12 @@ saveCounterpointsToCSV filePath counterpoints = do
   let csvContent = unlines $ map (intercalate "," . map show) counterpoints
   writeFile filePath csvContent
 
--- * utilities for tidal
-
 {-# NOINLINE gRef #-}
 gRef = unsafePerformIO $ newIORef (toDyn (), [] :: [Dynamic])
 
 {-# NOINLINE xRef #-}
 xRef = unsafePerformIO $ newIORef ([[]] :: [[Int]])
 
--- | applied by fux1
 cachef f config g = do
   (oldConfig, gOld) <- readIORef gRef
   if Just config == fromDynamic oldConfig && map Just g == map fromDynamic gOld
